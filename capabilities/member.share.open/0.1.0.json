@@ -1,0 +1,539 @@
+{
+  "schema_version": "cua.capability/v1",
+  "id": "member.share.open",
+  "version": "0.1.0",
+  "title": "Open a new share account",
+  "description": "Open a new share (sub-account) of a given type for an existing member and return the confirmation. Commits a change on the system of record.",
+  "app": {
+    "product": "coreone-teller",
+    "vendor": "CoreOne Systems",
+    "versions": [
+      "4.2"
+    ],
+    "surface": "legacy_web"
+  },
+  "entry": "/login",
+  "inputs": [
+    {
+      "name": "member_id",
+      "type": "string",
+      "description": "Member number (5\u201310 digits)",
+      "required": true,
+      "pattern": "^\\d{5,10}$",
+      "sensitivity": "internal"
+    },
+    {
+      "name": "share_type",
+      "type": "enum",
+      "description": "Product type of the new share",
+      "required": true,
+      "enum": [
+        "Money Market",
+        "Certificate",
+        "Holiday Club"
+      ],
+      "sensitivity": "public"
+    },
+    {
+      "name": "nickname",
+      "type": "string",
+      "description": "Nickname shown on statements",
+      "required": true,
+      "sensitivity": "internal"
+    },
+    {
+      "name": "opening_deposit",
+      "type": "money",
+      "description": "Opening deposit amount",
+      "required": true,
+      "pattern": "^\\d+(\\.\\d{2})?$",
+      "sensitivity": "confidential"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "new_share_id",
+      "type": "string",
+      "description": "ID of the newly opened share",
+      "sensitivity": "internal"
+    },
+    {
+      "name": "confirmation_number",
+      "type": "string",
+      "description": "Confirmation number shown after opening",
+      "sensitivity": "internal"
+    }
+  ],
+  "outcomes": [
+    {
+      "condition": "no_records",
+      "code": "RECORD_NOT_FOUND",
+      "description": "Search or lookup returned nothing."
+    },
+    {
+      "condition": "invalid_member_number",
+      "code": "INVALID_INPUT",
+      "description": "The app rejected the input format."
+    },
+    {
+      "condition": "form_validation",
+      "code": "VALIDATION_ERROR",
+      "description": "The app rejected a form submission."
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "intent": "Start by entering the username into the User ID field.",
+      "action": "fill",
+      "target": {
+        "frame": "_top",
+        "description": "textbox \"User ID\"",
+        "strategies": [
+          {
+            "by": "label",
+            "role": "textbox",
+            "label": "User ID"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "name",
+            "value": "F_0001"
+          },
+          {
+            "by": "css",
+            "path": "body > font > center > table > tbody > tr > td > form > table > tbody > tr:nth-of-type(1) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "value": {
+        "secret": "username"
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "auth",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s02",
+      "intent": "Fill password field with secret before signing on",
+      "action": "fill",
+      "target": {
+        "frame": "_top",
+        "description": "textbox \"Password\"",
+        "strategies": [
+          {
+            "by": "label",
+            "role": "textbox",
+            "label": "Password"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "name",
+            "value": "F_0002"
+          },
+          {
+            "by": "css",
+            "path": "body > font > center > table > tbody > tr > td > form > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "value": {
+        "secret": "password"
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "auth",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s03",
+      "intent": "Click Sign On to log in after credentials are filled.",
+      "action": "click",
+      "target": {
+        "frame": "_top",
+        "description": "button \"Sign On\"",
+        "strategies": [
+          {
+            "by": "role_name",
+            "role": "button",
+            "name": "Sign On"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "value",
+            "value": "Sign On"
+          },
+          {
+            "by": "css",
+            "path": "body > font > center > table > tbody > tr > td > form > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "auth",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "url",
+            "frame": "_top",
+            "path": "/app"
+          }
+        ]
+      },
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s04",
+      "intent": "Navigate to New Share Account function to begin opening the share.",
+      "action": "click",
+      "target": {
+        "frame": "nav",
+        "description": "link \"New Share Account\"",
+        "strategies": [
+          {
+            "by": "role_name",
+            "role": "link",
+            "name": "New Share Account"
+          },
+          {
+            "by": "css",
+            "path": "body > font > table > tbody > tr:nth-of-type(2) > td > font > a"
+          }
+        ]
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "url",
+            "frame": "main",
+            "path": "/share/new"
+          }
+        ]
+      },
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s05",
+      "intent": "Fill in the member number field first",
+      "action": "fill",
+      "target": {
+        "frame": "main",
+        "description": "textbox \"Member Number:\"",
+        "strategies": [
+          {
+            "by": "label",
+            "role": "textbox",
+            "label": "Member Number:"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "name",
+            "value": "F_0300"
+          },
+          {
+            "by": "css",
+            "path": "body > font > form > table > tbody > tr:nth-of-type(1) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "value": {
+        "input": "member_id"
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s06",
+      "intent": "Select the Holiday Club share type from the dropdown.",
+      "action": "select",
+      "target": {
+        "frame": "main",
+        "description": "combobox \"Share Type:\"",
+        "strategies": [
+          {
+            "by": "label",
+            "role": "combobox",
+            "label": "Share Type:"
+          },
+          {
+            "by": "attr",
+            "tag": "select",
+            "attr": "name",
+            "value": "F_0301"
+          },
+          {
+            "by": "css",
+            "path": "body > font > form > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > select"
+          }
+        ]
+      },
+      "value": {
+        "input": "share_type"
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s07",
+      "intent": "Fill in the Nickname field with the provided input value.",
+      "action": "fill",
+      "target": {
+        "frame": "main",
+        "description": "textbox \"Nickname:\"",
+        "strategies": [
+          {
+            "by": "label",
+            "role": "textbox",
+            "label": "Nickname:"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "name",
+            "value": "F_0302"
+          },
+          {
+            "by": "css",
+            "path": "body > font > form > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "value": {
+        "input": "nickname"
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s08",
+      "intent": "Fill the opening deposit field with the provided amount.",
+      "action": "fill",
+      "target": {
+        "frame": "main",
+        "description": "textbox \"Opening Deposit:\"",
+        "strategies": [
+          {
+            "by": "label",
+            "role": "textbox",
+            "label": "Opening Deposit:"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "name",
+            "value": "F_0303"
+          },
+          {
+            "by": "css",
+            "path": "body > font > form > table > tbody > tr:nth-of-type(4) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "value": {
+        "input": "opening_deposit"
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s09",
+      "intent": "All fields filled correctly, proceed by clicking Continue.",
+      "action": "click",
+      "target": {
+        "frame": "main",
+        "description": "button \"Continue\"",
+        "strategies": [
+          {
+            "by": "role_name",
+            "role": "button",
+            "name": "Continue"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "value",
+            "value": "Continue"
+          },
+          {
+            "by": "css",
+            "path": "body > font > form > table > tbody > tr:nth-of-type(5) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "url",
+            "frame": "main",
+            "path": "/share/review?F_0300={{member_id}}&F_0301={{share_type}}&F_0302={{nickname}}&F_0303={{opening_deposit}}"
+          }
+        ]
+      },
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s10",
+      "intent": "All details verified correctly, proceed to confirm and open the new share account.",
+      "action": "click",
+      "target": {
+        "frame": "main",
+        "description": "button \"Confirm & Open\"",
+        "strategies": [
+          {
+            "by": "role_name",
+            "role": "button",
+            "name": "Confirm & Open"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "value",
+            "value": "Confirm & Open"
+          },
+          {
+            "by": "css",
+            "path": "body > font > form > input:nth-of-type(5)"
+          }
+        ]
+      },
+      "risk": "irreversible",
+      "idempotent": false,
+      "phase": "main",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "url",
+            "frame": "main",
+            "path": "/share/open"
+          }
+        ]
+      },
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s11",
+      "intent": "Extract the new share ID shown on confirmation screen.",
+      "action": "extract",
+      "target": {
+        "frame": "main",
+        "description": "value cell of row 'New Share ID'",
+        "strategies": [
+          {
+            "by": "table_cell",
+            "column": "#1",
+            "row": {
+              "column": "#0",
+              "equals": "New Share ID"
+            }
+          },
+          {
+            "by": "css",
+            "path": "body > font > table:nth-of-type(2) > tbody > tr:nth-of-type(2) > td:nth-of-type(2)"
+          }
+        ]
+      },
+      "output": "new_share_id",
+      "risk": "read",
+      "idempotent": true,
+      "phase": "main",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s12",
+      "intent": "Extract the confirmation number shown on the confirmation screen.",
+      "action": "extract",
+      "target": {
+        "frame": "main",
+        "description": "value cell of row 'Confirmation #'",
+        "strategies": [
+          {
+            "by": "table_cell",
+            "column": "#1",
+            "row": {
+              "column": "#0",
+              "equals": "Confirmation #"
+            }
+          },
+          {
+            "by": "css",
+            "path": "body > font > table:nth-of-type(2) > tbody > tr:nth-of-type(3) > td:nth-of-type(2)"
+          }
+        ]
+      },
+      "output": "confirmation_number",
+      "risk": "read",
+      "idempotent": true,
+      "phase": "main",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    }
+  ],
+  "success": {
+    "all_of": [
+      {
+        "kind": "url",
+        "frame": "main",
+        "path": "/share/open"
+      },
+      {
+        "kind": "element",
+        "target": {
+          "frame": "main",
+          "description": "table cell",
+          "strategies": [
+            {
+              "by": "css",
+              "path": "body > font > table:nth-of-type(1) > tbody > tr > td"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "discovery_run": "20260918T232920Z-discovery-member-share-open",
+    "model": "claude-sonnet-5",
+    "recorded_at": "2026-09-18T23:30:05.265360Z",
+    "tenant": "harbor",
+    "goal": "Sign on and open a new {share_type} share account named '{nickname}' with an opening deposit of {opening_deposit} for member {member_id}. Complete it through to the confirmation screen and read the new share ID and the confirmation number.",
+    "human_steps": 0
+  },
+  "approval": {
+    "state": "approved",
+    "reviewer": "reviewer:neng",
+    "at": "2026-09-18T23:30:18.314751Z",
+    "content_hash": "sha256:db324d6b8697dd04848acd8901bd1775",
+    "notes": "Irreversible at s10; unattended replay requires per-call authorization"
+  }
+}

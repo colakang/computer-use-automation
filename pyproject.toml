@@ -1,0 +1,40 @@
+[project]
+name = "cua"
+version = "0.1.0"
+description = "Computer-use automation: LLM discovery -> typed capability artifact -> deterministic replay, with guardrails and human handoff"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "playwright>=1.63.0",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.3",
+    "python-multipart>=0.0.32",
+    "pyyaml>=6.0.3",
+    "typer>=0.27.2",
+    "uvicorn>=0.53.0",
+]
+
+[project.optional-dependencies]
+anthropic = [
+    "anthropic>=1.7.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.8,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.uv.build-backend]
+module-name = ["cua", "mockbank"]
+
+[project.scripts]
+cua = "cua.cli:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,26 @@
+# CoreOne Teller 4.3 relabelled several screens. Same flow, same contract —
+# only how five controls are found differs. Applies to every tenant on 4.3.
+# Found by replaying the 4.2 artifact on a 4.3 tenant: the replay reported
+# drift on s04–s06 and refused (target_drifted) at s08, see evidence/.
+applies_to: member.savings_balance.read@0.1.0
+scope: app_version
+key: "4.3"
+reason: "4.3 renamed 'Member Inquiry'→'Member Lookup', 'Search Value:'→'Lookup Value:', 'Search'→'Find', 'Balance'→'Current Balance', 'Name:'→'Member Name:'"
+reviewed_by: "reviewer:neng"
+targets:
+  - step: s04
+    strategies:
+      - {by: role_name, role: link, name: Member Lookup}
+  - step: s05
+    strategies:
+      - {by: label, role: textbox, label: "Lookup Value:"}
+      - {by: attr, tag: input, attr: name, value: F_0108}
+  - step: s06
+    strategies:
+      - {by: role_name, role: button, name: Find}
+  - step: s08
+    strategies:
+      - {by: table_cell, column: Current Balance, row: {column: Type, equals: Share Savings}}
+  - step: s09
+    strategies:
+      - {by: table_cell, column: "#1", row: {column: "#0", equals: "Member Name:"}}

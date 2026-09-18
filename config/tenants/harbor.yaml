@@ -1,0 +1,8 @@
+id: harbor
+display: First Harbor Credit Union
+app: coreone-teller
+app_version: "4.2"
+base_url: http://127.0.0.1:8801/t/harbor
+secrets:
+  username: env:HARBOR_TELLER_USER
+  password: env:HARBOR_TELLER_PASSWORD

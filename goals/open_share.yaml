@@ -1,0 +1,39 @@
+capability_id: member.share.open
+title: Open a new share account
+description: Open a new share (sub-account) of a given type for an existing member and return the confirmation. Commits a change on the system of record.
+goal: "Sign on and open a new {share_type} share account named '{nickname}' with an opening deposit of {opening_deposit} for member {member_id}. Complete it through to the confirmation screen and read the new share ID and the confirmation number."
+tenant: harbor
+inputs:
+  - name: member_id
+    type: string
+    description: Member number (5–10 digits)
+    pattern: "^\\d{5,10}$"
+    sensitivity: internal
+    example: "20077"
+  - name: share_type
+    type: enum
+    enum: ["Money Market", "Certificate", "Holiday Club"]
+    description: Product type of the new share
+    sensitivity: public
+    example: "Holiday Club"
+  - name: nickname
+    type: string
+    description: Nickname shown on statements
+    sensitivity: internal
+    example: "Holiday 2026"
+  - name: opening_deposit
+    type: money
+    description: Opening deposit amount
+    pattern: "^\\d+(\\.\\d{2})?$"
+    sensitivity: confidential
+    example: "250.00"
+outputs:
+  - name: new_share_id
+    type: string
+    description: ID of the newly opened share
+    sensitivity: internal
+  - name: confirmation_number
+    type: string
+    description: Confirmation number shown after opening
+    sensitivity: internal
+max_steps: 25

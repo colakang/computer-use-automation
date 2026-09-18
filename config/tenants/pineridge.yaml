@@ -1,0 +1,8 @@
+id: pineridge
+display: Pine Ridge Federal Credit Union
+app: coreone-teller
+app_version: "4.3"
+base_url: http://127.0.0.1:8801/t/pineridge
+secrets:
+  username: env:PINERIDGE_TELLER_USER
+  password: env:PINERIDGE_TELLER_PASSWORD

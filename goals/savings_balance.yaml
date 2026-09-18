@@ -1,0 +1,24 @@
+# Goal spec: the *contract* is authored by a human (what a calling agent may
+# ask and gets back); discovery finds *how* on the live UI.
+capability_id: member.savings_balance.read
+title: Read member savings balance
+description: Look up a member by member number and return the balance of their Share Savings account and the member's name.
+goal: "Sign on, look up member {member_id}, and read the balance of their Share Savings account and the member's name from the member detail screen."
+tenant: harbor
+inputs:
+  - name: member_id
+    type: string
+    description: Member number (5–10 digits)
+    pattern: "^\\d{5,10}$"
+    sensitivity: internal
+    example: "10042"
+outputs:
+  - name: savings_balance
+    type: money
+    description: Balance column of the member's Share Savings row
+    sensitivity: confidential
+  - name: member_name
+    type: string
+    description: Member's full name as shown on the detail screen
+    sensitivity: pii
+max_steps: 20

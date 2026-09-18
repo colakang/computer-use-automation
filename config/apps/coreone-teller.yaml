@@ -1,0 +1,68 @@
+# Vendor product profile: CoreOne Teller.
+# Runtime conditions are properties of the *product*, not of any one flow or
+# tenant, so they live here once and every capability on every tenant that
+# runs CoreOne inherits them. Adding a newly observed condition here fixes it
+# for the whole fleet.
+product: coreone-teller
+vendor: CoreOne Systems
+surface: legacy_web
+
+conditions:
+  # ---- business outcomes: legitimate answers, returned to the caller ----
+  - id: no_records
+    class: business
+    code: RECORD_NOT_FOUND
+    match: {text_contains: "No matching records found", frame: main}
+    description: Search or lookup returned nothing.
+  - id: invalid_member_number
+    class: business
+    code: INVALID_INPUT
+    match: {text_regex: "\\*\\* Invalid .* format \\*\\*", frame: main}
+    description: The app rejected the input format.
+  - id: form_validation
+    class: business
+    code: VALIDATION_ERROR
+    match: {text_regex: "\\*\\* (Member not found|Share type is required|Opening deposit must be [a-z]+) \\*\\*", frame: main}
+    description: The app rejected a form submission.
+
+  # ---- recoverable: handle in place, retry the step ----
+  - id: system_notice
+    class: recoverable
+    match: {text_contains: "System Notice", frame: main}
+    description: Maintenance interstitial that must be acknowledged.
+    handler:
+      type: dismiss
+      target:
+        frame: main
+        description: Acknowledge button on the System Notice page
+        strategies:
+          - {by: role_name, role: button, name: Acknowledge}
+  - id: session_expired
+    class: recoverable
+    match: {text_contains: "Your session has expired"}
+    description: Idle session timeout; sign on again and restart from the entry (only if nothing has committed).
+    handler: {type: reauthenticate}
+    max_attempts: 1
+  - id: host_unavailable
+    class: recoverable
+    match: {text_contains: "temporarily unavailable", frame: main}
+    description: Transient host/MQ outage; reload the frame if the step that loaded it was idempotent.
+    handler: {type: reload, backoff_ms: 800}
+    max_attempts: 2
+
+  # ---- fatal: stop and surface ----
+  - id: system_error
+    class: fatal
+    kind: app_error
+    match: {text_contains: "CoreOne System Error"}
+    description: Host abend / unhandled server error.
+  - id: access_denied
+    class: fatal
+    kind: permission_denied
+    match: {text_contains: "ACCESS DENIED"}
+    description: Service operator lacks an entitlement. Not the member's problem — an ops/config issue.
+
+dialogs:
+  - match: "pending hold"
+    action: accept
+    description: Informational hold warning on member detail; accepting only acknowledges it.

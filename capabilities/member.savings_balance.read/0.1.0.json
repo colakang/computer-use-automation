@@ -1,0 +1,412 @@
+{
+  "schema_version": "cua.capability/v1",
+  "id": "member.savings_balance.read",
+  "version": "0.1.0",
+  "title": "Read member savings balance",
+  "description": "Look up a member by member number and return the balance of their Share Savings account and the member's name.",
+  "app": {
+    "product": "coreone-teller",
+    "vendor": "CoreOne Systems",
+    "versions": [
+      "4.2"
+    ],
+    "surface": "legacy_web"
+  },
+  "entry": "/login",
+  "inputs": [
+    {
+      "name": "member_id",
+      "type": "string",
+      "description": "Member number (5\u201310 digits)",
+      "required": true,
+      "pattern": "^\\d{5,10}$",
+      "sensitivity": "internal"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "savings_balance",
+      "type": "money",
+      "description": "Balance column of the member's Share Savings row",
+      "sensitivity": "confidential"
+    },
+    {
+      "name": "member_name",
+      "type": "string",
+      "description": "Member's full name as shown on the detail screen",
+      "sensitivity": "pii"
+    }
+  ],
+  "outcomes": [
+    {
+      "condition": "no_records",
+      "code": "RECORD_NOT_FOUND",
+      "description": "Search or lookup returned nothing."
+    },
+    {
+      "condition": "invalid_member_number",
+      "code": "INVALID_INPUT",
+      "description": "The app rejected the input format."
+    },
+    {
+      "condition": "form_validation",
+      "code": "VALIDATION_ERROR",
+      "description": "The app rejected a form submission."
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "intent": "Start by entering the username in the User ID field.",
+      "action": "fill",
+      "target": {
+        "frame": "_top",
+        "description": "textbox \"User ID\"",
+        "strategies": [
+          {
+            "by": "label",
+            "role": "textbox",
+            "label": "User ID"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "name",
+            "value": "F_0001"
+          },
+          {
+            "by": "css",
+            "path": "body > font > center > table > tbody > tr > td > form > table > tbody > tr:nth-of-type(1) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "value": {
+        "secret": "username"
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "auth",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s02",
+      "intent": "Fill in the password field before signing on.",
+      "action": "fill",
+      "target": {
+        "frame": "_top",
+        "description": "textbox \"Password\"",
+        "strategies": [
+          {
+            "by": "label",
+            "role": "textbox",
+            "label": "Password"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "name",
+            "value": "F_0002"
+          },
+          {
+            "by": "css",
+            "path": "body > font > center > table > tbody > tr > td > form > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "value": {
+        "secret": "password"
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "auth",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s03",
+      "intent": "Click Sign On to submit credentials and proceed to the main screen.",
+      "action": "click",
+      "target": {
+        "frame": "_top",
+        "description": "button \"Sign On\"",
+        "strategies": [
+          {
+            "by": "role_name",
+            "role": "button",
+            "name": "Sign On"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "value",
+            "value": "Sign On"
+          },
+          {
+            "by": "css",
+            "path": "body > font > center > table > tbody > tr > td > form > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "auth",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "url",
+            "frame": "_top",
+            "path": "/app"
+          }
+        ]
+      },
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s04",
+      "intent": "Navigate to Member Inquiry to look up member [member_id:\u202642].",
+      "action": "click",
+      "target": {
+        "frame": "nav",
+        "description": "link \"Member Inquiry\"",
+        "strategies": [
+          {
+            "by": "role_name",
+            "role": "link",
+            "name": "Member Inquiry"
+          },
+          {
+            "by": "css",
+            "path": "body > font > table > tbody > tr:nth-of-type(1) > td > font > a"
+          }
+        ]
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "url",
+            "frame": "main",
+            "path": "/member/search"
+          }
+        ]
+      },
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s05",
+      "intent": "Enter member number into search field",
+      "action": "fill",
+      "target": {
+        "frame": "main",
+        "description": "textbox \"Search Value:\"",
+        "strategies": [
+          {
+            "by": "label",
+            "role": "textbox",
+            "label": "Search Value:"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "name",
+            "value": "F_0108"
+          },
+          {
+            "by": "css",
+            "path": "body > font > form > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "value": {
+        "input": "member_id"
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s06",
+      "intent": "Search value is filled; now click Search to look up member.",
+      "action": "click",
+      "target": {
+        "frame": "main",
+        "description": "button \"Search\"",
+        "strategies": [
+          {
+            "by": "role_name",
+            "role": "button",
+            "name": "Search"
+          },
+          {
+            "by": "attr",
+            "tag": "input",
+            "attr": "value",
+            "value": "Search"
+          },
+          {
+            "by": "css",
+            "path": "body > font > form > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2) > input"
+          }
+        ]
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "url",
+            "frame": "main",
+            "path": "/member/results?F_0107=M&F_0108={{member_id}}"
+          }
+        ]
+      },
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s07",
+      "intent": "Click the member link to open detail screen",
+      "action": "click",
+      "target": {
+        "frame": "main",
+        "description": "link \"{{member_id}}\"",
+        "strategies": [
+          {
+            "by": "role_name",
+            "role": "link",
+            "name": "{{member_id}}"
+          },
+          {
+            "by": "css",
+            "path": "body > font > table:nth-of-type(2) > tbody > tr:nth-of-type(2) > td:nth-of-type(1) > a"
+          }
+        ]
+      },
+      "risk": "reversible",
+      "idempotent": true,
+      "phase": "main",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "url",
+            "frame": "main",
+            "path": "/member/detail?id={{member_id}}"
+          }
+        ]
+      },
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s08",
+      "intent": "Extract the Share Savings balance from the row.",
+      "action": "extract",
+      "target": {
+        "frame": "main",
+        "description": "'Balance' cell of row Type='Share Savings'",
+        "strategies": [
+          {
+            "by": "table_cell",
+            "column": "Balance",
+            "row": {
+              "column": "Type",
+              "equals": "Share Savings"
+            }
+          },
+          {
+            "by": "css",
+            "path": "body > font > table:nth-of-type(3) > tbody > tr:nth-of-type(2) > td:nth-of-type(4)"
+          }
+        ]
+      },
+      "output": "savings_balance",
+      "risk": "read",
+      "idempotent": true,
+      "phase": "main",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    },
+    {
+      "id": "s09",
+      "intent": "Extract member name from detail screen",
+      "action": "extract",
+      "target": {
+        "frame": "main",
+        "description": "value cell of row 'Name:'",
+        "strategies": [
+          {
+            "by": "table_cell",
+            "column": "#1",
+            "row": {
+              "column": "#0",
+              "equals": "Name:"
+            }
+          },
+          {
+            "by": "css",
+            "path": "body > font > table:nth-of-type(2) > tbody > tr:nth-of-type(2) > td:nth-of-type(2)"
+          }
+        ]
+      },
+      "output": "member_name",
+      "risk": "read",
+      "idempotent": true,
+      "phase": "main",
+      "timeout_ms": 15000,
+      "provenance": "model"
+    }
+  ],
+  "success": {
+    "all_of": [
+      {
+        "kind": "url",
+        "frame": "main",
+        "path": "/member/detail?id={{member_id}}"
+      },
+      {
+        "kind": "element",
+        "target": {
+          "frame": "main",
+          "description": "'Balance' cell of row Type='Share Savings'",
+          "strategies": [
+            {
+              "by": "table_cell",
+              "column": "Balance",
+              "row": {
+                "column": "Type",
+                "equals": "Share Savings"
+              }
+            },
+            {
+              "by": "css",
+              "path": "body > font > table:nth-of-type(3) > tbody > tr:nth-of-type(2) > td:nth-of-type(4)"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "discovery_run": "20260918T232717Z-discovery-member-savings_balance-read",
+    "model": "claude-sonnet-5",
+    "recorded_at": "2026-09-18T23:27:54.257671Z",
+    "tenant": "harbor",
+    "goal": "Sign on, look up member {member_id}, and read the balance of their Share Savings account and the member's name from the member detail screen.",
+    "human_steps": 0
+  },
+  "approval": {
+    "state": "approved",
+    "reviewer": "reviewer:neng",
+    "at": "2026-09-18T23:30:18.224531Z",
+    "content_hash": "sha256:2b4f01e16887778a173f7b006dccd976",
+    "notes": "Reviewed locators and checkpoints; read-only; safe for unattended replay"
+  }
+}

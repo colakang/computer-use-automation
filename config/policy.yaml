@@ -1,0 +1,26 @@
+# Deployment-wide guardrails. Enforced by cua.policy.Gate for every action in
+# discovery AND replay, and by a browser-level route filter as a backstop.
+
+allowed_actions: [click, fill, select, press, extract]
+
+# Paths relative to the tenant base URL. Anything else is blocked — including
+# navigations triggered by clicking a link (the Gate checks href/form action
+# before the click, the route filter catches what slips through).
+allowed_paths:
+  - "^/login"
+  - "^/app$"
+  - "^/(banner|nav|home|ack)"
+  - "^/member/(search|results|detail)"
+  - "^/share/(new|review|open)"
+denied_paths:
+  - "^/reports"      # not needed by any capability; deny by default
+  - "^/logout"       # signing off mid-run is never what the agent wants
+
+# Controls whose activation commits a change to the system of record.
+# Discovery: pauses for human approval. Replay: requires an explicit
+# per-invocation authorization, otherwise escalates (or blocks).
+irreversible:
+  - {role: button, name_regex: "(?i)^(confirm|submit|post|transfer|delete|close account|open account)"}
+  - {role: button, form_method: post, path_regex: "^/share/open"}
+
+max_discovery_steps: 30
