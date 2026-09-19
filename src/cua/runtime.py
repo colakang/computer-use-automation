@@ -72,7 +72,7 @@ def set_faults(base_url: str, faults: dict) -> None:
 
 
 def open_session(kind: str, slug: str, tenant_id: str, *, evidence_root: Path, headed: bool = False,
-                 escalate: bool = False, console_port: int = 8802) -> Session:
+                 escalate: bool = False, console_port: int = 8802, surface: str = "web") -> Session:
     tenant = load_tenant(tenant_id)
     profile = load_profile(tenant.app)
     policy = load_policy()
@@ -80,8 +80,14 @@ def open_session(kind: str, slug: str, tenant_id: str, *, evidence_root: Path, h
     redactor = Redactor()
     log = RunLog(evidence_root, kind, slug, redactor)
     ensure_mock(tenant.base_url)
-    surface = WebSurface(tenant.base_url, gate, headed=headed, dialog_rules=profile.dialogs,
-                         on_event=lambda e, f: log.event(e, **f))
+    kind_cls = WebSurface
+    if surface == "vision":
+        from .surface.vision import VisionSurface
+
+        kind_cls = VisionSurface
+    surface_obj = kind_cls(tenant.base_url, gate, headed=headed, dialog_rules=profile.dialogs,
+                           on_event=lambda e, f: log.event(e, **f))
+    surface = surface_obj  # noqa: F841 (name kept for readability below)
     secrets = SecretStore(tenant, on_read=redactor.register_secret)
     for name in secrets.names():  # register up front so a secret can never be logged, even before first use
         try:
@@ -93,5 +99,5 @@ def open_session(kind: str, slug: str, tenant_id: str, *, evidence_root: Path, h
         control = ControlChannel(surface, log, queue_dir=ROOT / "interventions",
                                  console_port=console_port)
     log.event("session.open", kind=kind, tenant=tenant.id, app=f"{profile.product}@{tenant.app_version}",
-              base_url=tenant.base_url, headed=headed, escalation=bool(control))
+              base_url=tenant.base_url, headed=headed, escalation=bool(control), surface=type(surface_obj).__name__)
     return Session(tenant, profile, policy, gate, redactor, log, surface, secrets, control)

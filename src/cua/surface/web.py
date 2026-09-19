@@ -32,6 +32,9 @@ class ActionError(Exception):
 
 
 class WebSurface:
+    sees_urls = True      # checkpoints on frame URLs are verifiable
+    time_scale = 1.0      # multiplier for step timeouts
+
     def __init__(
         self,
         base_url: str,
@@ -41,6 +44,7 @@ class WebSurface:
         dialog_rules: list[DialogRule] | None = None,
         on_event: Callable[[str, dict[str, Any]], None] | None = None,
         cdp_port: int | None = None,
+        inject_perception: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.gate = gate
@@ -57,8 +61,9 @@ class WebSurface:
         args = [f"--remote-debugging-port={cdp_port}"] if cdp_port else []
         self.browser = self._pw.chromium.launch(headless=not headed, args=args)
         self.context = self.browser.new_context(viewport={"width": 1180, "height": 760})
-        self.context.add_init_script(PERCEPTION_JS)
-        self.context.expose_binding("__cuaHumanEvent", self._on_human_event)
+        if inject_perception:
+            self.context.add_init_script(PERCEPTION_JS)
+            self.context.expose_binding("__cuaHumanEvent", self._on_human_event)
         self.context.route("**/*", route_guard(gate, self._on_block))
         self.page: Page = self.context.new_page()
         self.page.on("dialog", self._on_dialog)

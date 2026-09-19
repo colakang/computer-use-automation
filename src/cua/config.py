@@ -31,7 +31,7 @@ class Match(Strict):
 
     def hit(self, frame_texts: dict[str, str]) -> str | None:
         for name, text in frame_texts.items():
-            if self.frame and name != self.frame:
+            if self.frame and name != self.frame and name != "*":  # "*": surface without frames
                 continue
             if self.text_contains and self.text_contains.lower() in text.lower():
                 return name

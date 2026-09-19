@@ -23,6 +23,7 @@ goal spec ┤                                            ├─► Capability ar
 - **Single process and synchronous, with one owner per live session.** Playwright objects live on the automation thread. The operator console only enqueues commands, and the owner thread executes them *only while the human holds control*. The benefit is that the control-transfer model cannot race. The cost is that there is no concurrency inside a session, and a production deployment would run one worker per session. I chose not to build a queue or service layer, per §7 of the brief.
 - **Perception is our own ~400 lines of JS, not Playwright selectors or a vision model.** It builds an accessibility-style view: role, accessible name, *visual caption* ("the box next to `Search Value:`") and *table coordinates* (column header × a row identified by meaning). The same functions serve three purposes: the model's observation, recording (`describe`) and replay (`resolve`). A strategy that was unique when recorded therefore means the same thing when replayed. I rejected screenshot-plus-coordinates as the primary method: it cannot replay deterministically, and a pixel is not an auditable identity for "the Balance of Share Savings".
 - **The model sees text, not pixels.** It gets a structured snapshot of every frame with refs, a redacted action history, and the *names* of secrets. It returns one JSON action per step, and each call is stateless. Being stateless means a run can pause for a human for ten minutes and resume without stale conversation state. It also means `claude -p` and the Messages API are interchangeable behind a single `complete(system, user)` seam.
+- **Where the agent runs is not specified by the brief; I assume a dedicated VM plus an in-VM sidecar.** Each "digital worker" gets its own Windows VM inside the institution's VDI and logs in as a least-privilege service account, never borrowing a teller's session. The sidecar inside the VM exposes whichever channel the app offers (DOM, UIA or pixels) and executes inputs; the control plane (artifacts, policy, operator console) runs outside the VM. I rejected the alternatives: hardware HID/KVM is out-of-band but pixel-only and cannot scale to hundreds of tenants; an agent on tellers' workstations needs endpoint rollouts and blurs identity; a pure remote-desktop client gives pixels only, even where a UIA or DOM channel exists. In this repo, the Playwright-launched browser stands in for that VM and sidecar, and human takeover is shadowing the same session.
 - **The contract is human-authored and only the body is discovered.** `goals/*.yaml` declare inputs, outputs, types and sensitivity. The model decides *how*, not *what a calling agent may ask for*, because that is a product decision.
 
 ## 2. Artifact schema
@@ -78,14 +79,27 @@ Some rules I'd defend in review:
 
 A **3270/terminal** surface maps fields to screen-buffer positions and labels. The artifact schema and the replay engine do not change; each surface declares which strategy kinds it supports. The legacy-web case is already what I built against.
 
-**Pixel-only surfaces** (Citrix/RDP-published apps, owner-drawn clients with an empty UIA tree) get a `VisionSurface` behind the same protocol. A screen parser turns each screenshot into elements with role, text, visual caption, table position, enabled state and bounding box. The parser can be a VLM or a dedicated UI-element detector plus OCR. Four rules keep this compatible with deterministic replay:
+**Pixel-only surfaces** (Citrix/RDP-published apps, owner-drawn clients with an empty UIA tree) get a `VisionSurface` behind the same protocol; a prototype is in `src/cua/surface/vision.py` with evidence in [`evidence/VISION.md`](evidence/VISION.md). A screen parser turns each screenshot into elements with role, text, visual caption, table position, enabled state and bounding box. The parser can be a VLM or a dedicated UI-element detector plus OCR. Four rules keep this compatible with deterministic replay:
 
 - **Targets stay semantic.** `role_name`, `label` and `table_cell` resolve against the parsed elements exactly as they do against the DOM. The bounding box only says *where to deliver* the click, never *which control* it is. So an artifact recorded at 1280×800 still applies at 1920×1080, under another theme, or with the window moved.
 - **The determinism boundary is *decisions*, not *models*.** Replay may use a model to *perceive*, the same way it already uses a browser engine to render. It may never use a model to *decide* what to do next. The parser is pinned (model, version and prompt hash recorded in the artifact's `app` block). Its output passes the same gates: exactly one match or fail, and verify after every act.
 - **Cost and latency.** A parse costs seconds, while a DOM query costs milliseconds. Stable enterprise UIs make parses highly cacheable by screen fingerprint, and replay only needs to re-parse the region it is about to touch.
 - **Parser failure modes.** The parser can hallucinate controls, merge adjacent ones, misread disabled state, or miss content that is scrolled off-screen. These are caught by cross-checking against OCR text, by the uniqueness rule, and by post-action checkpoints. They are measured by a robustness harness that perturbs scale, layout and theme (alongside the fault injection already in `mockbank`) and gates approval on the pass rate.
 
-Where it runs: one dedicated VM per digital worker inside the institution's VDI, logged in as a least-privilege service account (never a teller's session), with an in-VM sidecar exposing whichever channel exists (DOM, UIA or pixels). Human takeover becomes shadowing that same VM session. Screenshots are PII, so they are masked before any hosted model sees them, or the parser runs on-prem.
+**What the prototype shows.**
+
+- **No DOM access.** The prototype injects no JS and reads no DOM or URLs: its only inputs are screenshots, and its only outputs are mouse clicks and keystrokes.
+- **Same artifact, different surface.** It replays the *same approved artifact* that was recorded on the DOM surface: all 9 steps complete, with the correct balance and name and zero drift. The four URL checkpoints are reported as `unverified_checkpoints` rather than passed silently. The fix is for the recorder to also emit visual checkpoints (screen heading, expected control).
+- **Silent misclicks.** On pixels, a click on a covered control lands on the overlay without any error. The first evidence run showed exactly this:
+  1. The parser did not flag the link under a popup as covered.
+  2. The click hit the backdrop.
+  3. Because the URL checkpoint was unobservable, the failure only surfaced one step later, blamed on the wrong step.
+  
+  I made two fixes. First, where the DOM artifact expects a navigation, the pixel surface now requires the screen fingerprint to *change* after the action (a weaker check, but one pixels can actually make). Second, the parser prompt now asks for everything outside a dialog over a dimmed page to be marked `obscured`, and the surface refuses to click obscured controls.
+
+  In the rerun, the parser *still* did not flag the link. The post-condition caught the misclick at the right step (`checkpoint_failed` at s07). The lesson for pixel surfaces: **a prompt is a hint; a checkpoint is a guarantee.**
+- **Cost.** A replay takes about 100 s, against about 1.3 s on the DOM, because the parser runs about 8 times at 5–25 s each. The cache is keyed *exactly* (a hash of the screen at half resolution with 32 grey levels). I first tried a perceptual-similarity key, and it would have let a screen showing another member's balance, in the same layout, reuse the old parse: a stale read. A blinking caret costs an extra parse; a stale value costs a wrong answer.
+- **Not wired yet.** Discovery on pixels, human-action capture beyond console clicks (these are hit-tested against the last parse), and navigation allowlisting at the gate: a pixel surface cannot see where a link leads, so it relies on name rules plus the network or VDI allowlist.
 
 **Reuse across tenants** is layered as base capability → *vendor-version overlay* → *tenant overlay*:
 
@@ -128,8 +142,13 @@ Every transition is logged with actor and reason. The evidence shows both kinds 
   6. Logs describe cells by table position, never by content.
   7. Playwright traces are not used at all, because they capture typed credentials and full DOM.
   8. A test scans all persisted evidence for known sensitive values.
+- **Model hosting and what leaves the institution.** A financial deployment runs the models privately: either in a single-tenant environment that we operate for the institution (inside their cloud account or ours, with no retention and region pinning), or as an on-prem appliance with a smaller open VLM. Because the parser is pinned and measured by the perturbation harness, swapping the hosted model for an on-prem one is a measured accuracy decision, not a rewrite. Independently, what reaches any model can be minimised without hurting its judgement:
+  - **Navigation decisions need layout, labels and control types, not values.** A cheap local pass (on-prem OCR and a detector, with no LLM) finds text regions. Table-body cells, `Caption:` values and pattern matches are classified as values and painted over with typed placeholders (`‹MONEY›`, `‹NAME#3›`) before the image leaves; captions, buttons and headings stay readable.
+  - **The model says *where*; local code reads *what*.** Outputs are read by local OCR from the bounding box the parser returned, so the model never has to transcribe a balance.
+  - **Decisions that depend on values** ("the row whose name matches the request", "balance above X") use consistent pseudonyms (equal values get equal tokens) or move into deterministic code over locally-read values.
+  - My estimate is that this preserves judgement for over 90% of navigation and form-fill steps. It degrades for value-dependent reasoning, which should not be delegated to the model anyway.
 - **Limits:**
-  - During discovery the **model sees page data**. Discovery must run on sandbox or synthetic members, or a de-identified test tenant; production replays never call the model.
+  - During discovery (and in the pixel prototype's parser) the **model sees page data**; the prototype sends synthetic screenshots to hosted Claude, which a production deployment would replace with the private setup above. Discovery must run on sandbox or synthetic members, or a de-identified test tenant; production replays never call the model.
   - Undeclared free-text PII is caught by structural masking in screenshots and snapshots, but not in arbitrary log strings.
   - The operator console is unauthenticated and bound to localhost.
   - The allowlist is URL-based, so a same-URL action with a different effect relies on the irreversible rules.
@@ -149,7 +168,7 @@ Every transition is logged with actor and reason. The evidence shows both kinds 
 - Authentication and authorization for the console and interventions.
 - Webhook or pager routing.
 - Promoting human steps into a new artifact version automatically (they are captured as `provenance: human` trace entries in discovery, but not replayed from replay escalations).
-- The pixel-only `VisionSurface` (designed above, not built).
+- In the `VisionSurface` prototype: discovery on pixels, visual checkpoints, pre-model masking and local OCR reads (all designed in §4 and §6).
 - Parallel sessions.
 
 **Next, in order:**
@@ -157,5 +176,5 @@ Every transition is logged with actor and reason. The evidence shows both kinds 
 1. **Bounded assisted re-discovery on drift.** When replay reports `target_drifted` on step N, let the model propose new strategies for *that step only*, policy-checked, and emit an overlay for review.
 2. A capability registry service with approval workflow and per-tenant rollout (canary tenants first).
 3. Real operator routing (queue, SLAs, authn) and a streaming co-browse console.
-4. A `VisionSurface` (pinned screen parser + OCR cross-check) and a desktop `Surface` on UI Automation, both reusing `strategies` as-is, plus a perturbation harness (scale/layout/theme × fault injection) whose pass rate gates approval.
+4. Harden the `VisionSurface` (visual checkpoints, pre-model masking with local OCR reads, on-prem parser) and add a desktop `Surface` on UI Automation, both reusing `strategies` as-is, plus a perturbation harness (scale/layout/theme × fault injection) whose pass rate gates approval.
 5. An approval gate driven by a confidence score from `scripts/stability.py`-style replays across tenants.

@@ -93,16 +93,24 @@ uv run python scripts/operator_bot.py --claim --click 562,190 --release retry --
 
 Irreversible steps work the same way. `member.share.open` stops before **Confirm & Open** unless the caller passes `--irreversible authorized`; with `--irreversible escalate` it asks a human approver at that step instead.
 
+### 5. Pixel-only replay (VisionSurface prototype)
+
+```bash
+uv run cua replay member.savings_balance.read -t harbor -i member_id=10042 --surface vision
+```
+
+This replays the *same approved artifact* while reading only screenshots and sending only mouse and keyboard input: no DOM, no injected JS, no URLs. A pinned VLM screen parser (Claude via `claude -p`) turns each frame into elements, and the recorded semantic strategies (`role_name`, `label`, `table_cell`) resolve against them. A replay takes about 100 s, compared with about 1.3 s on the DOM. It needs a model for *perception* only, never for decisions. Evidence: [`evidence/VISION.md`](evidence/VISION.md). Design and limits: REPORT §4 and §6.
+
 ### Running without live services
 
 Replay, tests and evidence regeneration need **no LLM and no network**. The mock runs locally and the approved artifacts are committed:
 
 ```bash
-make test        # 43 tests: unit + LLM adapters + real-browser integration + fake-model discovery + handoff
+make test        # 46 tests: unit + LLM adapters + real-browser integration + fake-model discovery + handoff + vision matching
 make evidence    # re-runs all 18 replay scenarios into evidence/runs + evidence/REPLAYS.md
 ```
 
-Only `cua discover` needs a model.
+Only `cua discover` and `--surface vision` need a model.
 
 ## Repository layout
 
@@ -115,7 +123,8 @@ src/cua/
   policy.py        allowlist gate + irreversibility classification + network route guard
   handoff.py       control channel (who holds the session), interventions, operator console
   redact.py        known-value + pattern redaction; evidence.py: redacted JSONL + masked screenshots
-  surface/         the perceive/act seam: base.py (protocol), web.py (Playwright), perception.js
+  surface/         the perceive/act seam: base.py (protocol), web.py (DOM via Playwright + perception.js),
+                   vision.py (pixels only: screenshots + mouse/keyboard + pinned VLM screen parser)
   store.py         capabilities/<id>/<semver>.json, overlays, approval
 config/            apps/coreone-teller.yaml (vendor profile: runtime conditions), tenants/, policy.yaml
 goals/             goal specs (human-authored contracts handed to discovery)

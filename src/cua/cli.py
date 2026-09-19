@@ -174,6 +174,7 @@ def replay(
     on_failure: Annotated[str, typer.Option(help="fail | escalate")] = "fail",
     no_overlays: Annotated[bool, typer.Option(help="Replay the base artifact even if overlays exist.")] = False,
     headed: bool = False,
+    surface: Annotated[str, typer.Option(help="web (DOM) | vision (pixels only, prototype)")] = "web",
     evidence: EvidenceOpt = ROOT / "runs",
 ) -> None:
     """Replay a capability deterministically (no LLM). Prints the structured result as JSON."""
@@ -187,8 +188,8 @@ def replay(
     if not approval_err and warnings and any("not reviewed" in w for w in warnings):
         approval_err = "; ".join(w for w in warnings if "not reviewed" in w)
     escalate = irreversible == "escalate" or on_failure == "escalate"
-    sess = open_session("replay", capability.replace(".", "-"), tenant, evidence_root=evidence, headed=headed,
-                        escalate=escalate)
+    sess = open_session("replay", capability.replace(".", "-") + ("-vision" if surface == "vision" else ""), tenant,
+                        evidence_root=evidence, headed=headed, escalate=escalate, surface=surface)
     try:
         faults = {k: _fault_value(v) for k, v in _kv(inject).items()}
         set_faults(sess.tenant.base_url, faults)

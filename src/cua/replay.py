@@ -110,6 +110,8 @@ class ReplayResult(BaseModel):
     drift: list[dict[str, Any]] = []
     interventions: list[dict[str, Any]] = []
     steps_executed: int = 0
+    surface: str = "web"
+    unverified_checkpoints: list[str] = []   # conditions this surface cannot observe (e.g. URLs on pixels)
 
 
 @dataclass
@@ -162,6 +164,9 @@ class Replayer:
         self.last_step: Step | None = None     # last step whose action executed
         self.current: Step | None = None       # step being attempted (for failure reports)
         self.mapping = {o.condition: o for o in cap.outcomes}
+        self.unverified: list[str] = []
+        self._pre_token: str | None = None   # pixel surfaces: screen fingerprint before the current action
+        self.scale = getattr(surface, "time_scale", 1.0)
 
     # ================================================================== entry
 
@@ -208,6 +213,15 @@ class Replayer:
         res.duration_ms = int((time.monotonic() - t0) * 1000)
         res.recoveries, res.drift, res.interventions, res.steps_executed = (
             self.recoveries, self.drift, self.interventions, self.executed)
+        res.surface = "vision" if not getattr(self.s, "sees_urls", True) else "web"
+        res.unverified_checkpoints = self.unverified
+        if hasattr(self.s, "stats"):
+            if res.status != "rejected":
+                try:  # pixel surfaces: keep a masked final frame as evidence of what was perceived
+                    self.s.screenshot(self.log.next_shot(f"final-{res.status}"), self.redactor.literals)
+                except Exception:
+                    pass
+            self.log.event("vision.stats", **self.s.stats)
         self.log.event("replay.end", status=res.status, outcome=res.outcome and res.outcome.code,
                        failure=res.failure and res.failure.kind, duration_ms=res.duration_ms)
         # Persisted copy: outputs are redacted *structurally* by their declared
@@ -291,6 +305,7 @@ class Replayer:
             self._authorize(step, decision.reason)
         if self.control:
             self.control.require_automation()
+        self._pre_token = self.s.screen_token() if hasattr(self.s, "screen_token") else None
         try:
             self._act(step, ref)
         except ActionError as e:
@@ -304,6 +319,7 @@ class Replayer:
             self._verify(step.expect, f"{step.id} post-condition", step)
         else:
             self.s.settle(200)
+        self._pre_token = None
         self._check_conditions(step)
         self.log.event("step.ok", step=step.id, locations=self.s.locations())
 
@@ -355,7 +371,7 @@ class Replayer:
 
     def _await_target(self, step: Step) -> str:
         target = self._render_target(step.target)
-        deadline = time.monotonic() + step.timeout_ms / 1000
+        deadline = time.monotonic() + step.timeout_ms * self.scale / 1000
         t_start = time.monotonic()
         fallback_since: float | None = None
         while True:
@@ -396,7 +412,7 @@ class Replayer:
             self.s.pump(150)
 
     def _verify(self, cp: Checkpoint, what: str, step: Step | None, timeout_s: float | None = None) -> None:
-        deadline = time.monotonic() + (timeout_s or (step.timeout_ms / 1000 if step else 10))
+        deadline = time.monotonic() + (timeout_s or (step.timeout_ms / 1000 if step else 10)) * self.scale
         while True:
             self._check_conditions(step)
             unmet = [c for c in cp.all_of if not self._holds(c)]
@@ -404,11 +420,22 @@ class Replayer:
                 return
             if time.monotonic() > deadline:
                 exp = "; ".join(self._describe_cond(c) for c in unmet)
-                raise _Hard("checkpoint_failed", f"{what}: {exp}", f"locations {self.s.locations()}", retryable=True)
+                observed = (f"locations {self.s.locations()}" if getattr(self.s, "sees_urls", True)
+                            else "screen unchanged since before the action (click may have landed on an overlay)")
+                raise _Hard("checkpoint_failed", f"{what}: {exp}", observed, retryable=True)
             self.s.pump(150)
 
     def _holds(self, c) -> bool:
         if isinstance(c, UrlIs):
+            if not getattr(self.s, "sees_urls", True):
+                # Pixels carry no URL. Don't pretend it was verified: record it, and
+                # substitute the weaker visual check we *can* make — the screen must
+                # have changed since before the action. (A click that silently
+                # landed on an overlay leaves the screen unchanged.)
+                d = self._describe_cond(c)
+                if d not in self.unverified:
+                    self.unverified.append(d)
+                return self._pre_token is None or self.s.screen_token() != self._pre_token
             actual = self.s.locations().get(c.frame)
             return actual is not None and location_matches(actual, render(c.path, self.inputs))
         if isinstance(c, ElementPresent):
@@ -419,6 +446,8 @@ class Replayer:
 
     def _describe_cond(self, c) -> str:
         if isinstance(c, UrlIs):
+            if not getattr(self.s, "sees_urls", True):
+                return f"screen changes (stands in for {c.frame} at {render(c.path, self.inputs)})"
             return f"{c.frame} at {render(c.path, self.inputs)}"
         if isinstance(c, ElementPresent):
             return f"{c.target.description} present"
@@ -467,7 +496,10 @@ class Replayer:
             if self.last_step is not None and not self.last_step.idempotent:
                 raise _Hard("recovery_exhausted", "idempotent step before reload", f"{c.id} after non-idempotent {self.last_step.id}")
             self.s.pump(h.backoff_ms)
-            self.s.reload_frame(frame)
+            try:
+                self.s.reload_frame(frame)
+            except ActionError as e:
+                raise _Hard("recovery_exhausted", f"reload for {c.id}", str(e)) from None
             self.s.settle()
         elif isinstance(h, Reauthenticate):
             if self.committed:

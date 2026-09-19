@@ -42,6 +42,8 @@ Each run has `scenario.txt` (the exact command), `log.jsonl`, `result.json`, `sc
 
 The handoff scenarios use `scripts/operator_bot.py`. It is a scripted operator that calls the console's HTTP API exactly as the console page does, so the handoff is reproducible. The human's click is captured in the page by the same listener as a manual click, and it is recorded as `button "No thanks"` in `result.json → interventions[].human_actions`.
 
+**[VISION.md](VISION.md)** covers the pixel-only prototype. The same approved artifact is replayed through `--surface vision`: screenshots in, mouse and keyboard out, and a pinned VLM screen parser in between. It shows the happy path, a business outcome read from on-screen text, the System Notice recovery, and a refusal to click a control that the parser reports as covered by an overlay.
+
 **[STABILITY.md](STABILITY.md)**: 20 runs of each of four cases, giving a pass rate, timing spread and drift count. It exists because generating this evidence surfaced a load-timing race (see REPORT.md §3).
 
 Regenerate: `make evidence` (replays) · `make stability` · `uv run cua discover goals/<spec>.yaml --evidence evidence/runs` (needs a model).
