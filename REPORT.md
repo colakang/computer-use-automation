@@ -78,6 +78,15 @@ Some rules I'd defend in review:
 
 A **3270/terminal** surface maps fields to screen-buffer positions and labels. The artifact schema and the replay engine do not change; each surface declares which strategy kinds it supports. The legacy-web case is already what I built against.
 
+**Pixel-only surfaces** (Citrix/RDP-published apps, owner-drawn clients with an empty UIA tree) get a `VisionSurface` behind the same protocol. A screen parser turns each screenshot into elements with role, text, visual caption, table position, enabled state and bounding box. The parser can be a VLM or a dedicated UI-element detector plus OCR. Four rules keep this compatible with deterministic replay:
+
+- **Targets stay semantic.** `role_name`, `label` and `table_cell` resolve against the parsed elements exactly as they do against the DOM. The bounding box only says *where to deliver* the click, never *which control* it is. So an artifact recorded at 1280×800 still applies at 1920×1080, under another theme, or with the window moved.
+- **The determinism boundary is *decisions*, not *models*.** Replay may use a model to *perceive*, the same way it already uses a browser engine to render. It may never use a model to *decide* what to do next. The parser is pinned (model, version and prompt hash recorded in the artifact's `app` block). Its output passes the same gates: exactly one match or fail, and verify after every act.
+- **Cost and latency.** A parse costs seconds, while a DOM query costs milliseconds. Stable enterprise UIs make parses highly cacheable by screen fingerprint, and replay only needs to re-parse the region it is about to touch.
+- **Parser failure modes.** The parser can hallucinate controls, merge adjacent ones, misread disabled state, or miss content that is scrolled off-screen. These are caught by cross-checking against OCR text, by the uniqueness rule, and by post-action checkpoints. They are measured by a robustness harness that perturbs scale, layout and theme (alongside the fault injection already in `mockbank`) and gates approval on the pass rate.
+
+Where it runs: one dedicated VM per digital worker inside the institution's VDI, logged in as a least-privilege service account (never a teller's session), with an in-VM sidecar exposing whichever channel exists (DOM, UIA or pixels). Human takeover becomes shadowing that same VM session. Screenshots are PII, so they are masked before any hosted model sees them, or the parser runs on-prem.
+
 **Reuse across tenants** is layered as base capability → *vendor-version overlay* → *tenant overlay*:
 
 - An overlay can only re-target controls and adjust checkpoints. It cannot add steps, change the contract or lower risk. So the calling agent sees **one tool schema across every tenant**, and an approved base plus a reviewed overlay is still the same capability.
@@ -140,7 +149,7 @@ Every transition is logged with actor and reason. The evidence shows both kinds 
 - Authentication and authorization for the console and interventions.
 - Webhook or pager routing.
 - Promoting human steps into a new artifact version automatically (they are captured as `provenance: human` trace entries in discovery, but not replayed from replay escalations).
-- Screenshot-based fallback strategies.
+- The pixel-only `VisionSurface` (designed above, not built).
 - Parallel sessions.
 
 **Next, in order:**
@@ -148,5 +157,5 @@ Every transition is logged with actor and reason. The evidence shows both kinds 
 1. **Bounded assisted re-discovery on drift.** When replay reports `target_drifted` on step N, let the model propose new strategies for *that step only*, policy-checked, and emit an overlay for review.
 2. A capability registry service with approval workflow and per-tenant rollout (canary tenants first).
 3. Real operator routing (queue, SLAs, authn) and a streaming co-browse console.
-4. A desktop `Surface` on UI Automation, reusing `strategies` as-is.
+4. A `VisionSurface` (pinned screen parser + OCR cross-check) and a desktop `Surface` on UI Automation, both reusing `strategies` as-is, plus a perturbation harness (scale/layout/theme × fault injection) whose pass rate gates approval.
 5. An approval gate driven by a confidence score from `scripts/stability.py`-style replays across tenants.
